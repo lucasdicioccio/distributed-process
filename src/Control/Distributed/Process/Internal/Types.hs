@@ -53,6 +53,7 @@ module Control.Distributed.Process.Internal.Types
   , RegisterReply(..)
   , ProcessInfo(..)
   , ProcessInfoNone(..)
+  , NodeStats(..)
     -- * Node controller internal data types
   , NCMsg(..)
   , ProcessSignal(..)
@@ -483,7 +484,13 @@ data ProcessSignal =
   | Kill !ProcessId !String
   | Exit !ProcessId !Message
   | GetInfo !ProcessId
+  | GetStats
   deriving Show
+
+-- | Provide statistics about the local node
+data NodeStats = NodeStats {
+    statsProcessedMessages  :: Int
+  } deriving (Show, Eq, Typeable)
 
 --------------------------------------------------------------------------------
 -- Binary instances                                                           --
@@ -530,6 +537,7 @@ instance Binary ProcessSignal where
   put (Kill pid reason)     = putWord8 9 >> put pid >> put reason
   put (Exit pid reason)     = putWord8 10 >> put pid >> put (messageToPayload reason)
   put (GetInfo about)       = putWord8 30 >> put about
+  put (GetStats)            = putWord8 31
   get = do
     header <- getWord8
     case header of
@@ -545,6 +553,7 @@ instance Binary ProcessSignal where
       9  -> Kill <$> get <*> get
       10 -> Exit <$> get <*> (payloadToMessage <$> get)
       30 -> GetInfo <$> get
+      31 -> return GetStats
       _ -> fail "ProcessSignal.get: invalid"
 
 instance Binary DiedReason where
@@ -602,6 +611,11 @@ instance Binary ProcessInfo where
 instance Binary ProcessInfoNone where
   get = ProcessInfoNone <$> get
   put (ProcessInfoNone r) = put r
+
+instance Binary NodeStats where
+    get = NodeStats <$> get
+    put = put . statsProcessedMessages
+
 
 --------------------------------------------------------------------------------
 -- Accessors                                                                  --

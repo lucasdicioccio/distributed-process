@@ -37,6 +37,7 @@ module Control.Distributed.Process.Internal.Primitives
   , getSelfPid
   , getSelfNode
   , ProcessInfo(..)
+  , NodeStats(..)
   , getProcessInfo
     -- * Monitoring and linking
   , link
@@ -84,6 +85,7 @@ module Control.Distributed.Process.Internal.Primitives
   , reconnect
   , reconnectPort
     -- * Tracing/Debugging
+  , getNodeStats
   , trace
   ) where
 
@@ -157,6 +159,7 @@ import Control.Distributed.Process.Internal.Types
   , ProcessRegistrationException(..)
   , ProcessInfo(..)
   , ProcessInfoNone(..)
+  , NodeStats(..)
   , createMessage
   , runLocalProcess
   , ImplicitReconnect(WithImplicitReconnect, NoImplicitReconnect)
@@ -494,6 +497,19 @@ getProcessInfo pid =
        match (\(p :: ProcessInfo)     -> return $ Just p)
      , match (\(_ :: ProcessInfoNone) -> return Nothing)
      ]
+  where mkNode :: NodeId -> NodeId -> Process (Maybe NodeId)
+        mkNode them us = case them == us of
+                           True -> return Nothing
+                           _    -> return $ Just them
+
+
+-- | Get statistics of a given Node with a timeout
+getNodeStats :: Int -> NodeId -> Process (Maybe NodeStats)
+getNodeStats n nid = do
+  us <- getSelfNode
+  dest <- mkNode nid us
+  sendCtrlMsg dest $ GetStats
+  receiveTimeout n [match return]
   where mkNode :: NodeId -> NodeId -> Process (Maybe NodeId)
         mkNode them us = case them == us of
                            True -> return Nothing

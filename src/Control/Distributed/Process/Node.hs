@@ -132,6 +132,7 @@ import Control.Distributed.Process.Internal.Types
   , nodeOf
   , ProcessInfo(..)
   , ProcessInfoNone(..)
+  , NodeStats(..)
   , SendPortId(..)
   , typedChannelWithId
   , RegisterReply(..)
@@ -484,6 +485,7 @@ data NCState = NCState
      -- Process registry: names and where they live, mapped to the PIDs
   , _registeredHere :: !(Map String ProcessId)
   , _registeredOnNodes :: !(Map ProcessId [(NodeId,Int)])
+  , _stats :: !NodeStats
   }
 
 newtype NC a = NC { unNC :: StateT NCState (ReaderT LocalNode IO) a }
@@ -494,6 +496,7 @@ initNCState = NCState { _links    = Map.empty
                       , _monitors = Map.empty
                       , _registeredHere = Map.empty
                       , _registeredOnNodes = Map.empty
+                      , _stats = NodeStats 0
                       }
 
 -- | Thrown in response to the user invoking 'kill' (see Primitives.hs). This
@@ -583,6 +586,8 @@ nodeController = do
         ncEffectExit from to reason
       NCMsg (ProcessIdentifier from) (GetInfo pid) ->
         ncEffectGetInfo from pid
+      NCMsg (ProcessIdentifier from) (GetStats) ->
+        ncEffectGetStats from
       unexpected ->
         error $ "nodeController: unexpected message " ++ show unexpected
 
@@ -850,6 +855,25 @@ ncEffectGetInfo from pid =
                                                  then (k:ks)
                                                  else ks) []
 
+ncEffectGetStats :: ProcessId -> NC ()
+ncEffectGetStats from = do
+  node <- ask
+  statsData <- gets (id . (^. stats))
+  dispatch (isLocal node (ProcessIdentifier from)) from node statsData
+  where dispatch :: (Serializable a, Show a)
+                 => Bool
+                 -> ProcessId
+                 -> LocalNode
+                 -> a
+                 -> NC ()
+        dispatch True  dest _    pInfo = postAsMessage dest $ pInfo
+        dispatch False dest node pInfo = do
+            liftIO $ sendMessage node
+                                 (NodeIdentifier (localNodeId node))
+                                 (ProcessIdentifier dest)
+                                 WithImplicitReconnect
+                                 pInfo
+
 --------------------------------------------------------------------------------
 -- Auxiliary                                                                  --
 --------------------------------------------------------------------------------
@@ -902,6 +926,7 @@ destNid (Died _ _)          = Nothing
 destNid (Kill pid _)        = Just $ processNodeId pid
 destNid (Exit pid _)        = Just $ processNodeId pid
 destNid (GetInfo pid)       = Just $ processNodeId pid
+destNid (GetStats)          = Nothing
 
 -- | Check if a process is local to our own node
 isLocal :: LocalNode -> Identifier -> Bool
@@ -973,6 +998,9 @@ registeredHere = accessor _registeredHere (\ry st -> st { _registeredHere = ry }
 
 registeredOnNodes :: Accessor NCState (Map ProcessId [(NodeId, Int)])
 registeredOnNodes = accessor _registeredOnNodes (\ry st -> st { _registeredOnNodes = ry })
+
+stats :: Accessor NCState NodeStats
+stats = accessor _stats (\ls st -> st { _stats = ls })
 
 linksFor :: Identifier -> Accessor NCState (Set ProcessId)
 linksFor ident = links >>> DAC.mapDefault Set.empty ident

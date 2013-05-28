@@ -127,6 +127,8 @@ module Control.Distributed.Process
     -- * Reconnecting
   , reconnect
   , reconnectPort
+    -- * Tracing/Debugging
+  , getNodeStats
   ) where
 
 #if ! MIN_VERSION_base(4,6,0)
@@ -260,6 +262,8 @@ import Control.Distributed.Process.Internal.Primitives
     -- Reconnecting
   , reconnect
   , reconnectPort
+    -- * Tracing/Debugging
+  , getNodeStats
   )
 import Control.Distributed.Process.Node (forkProcess)
 
