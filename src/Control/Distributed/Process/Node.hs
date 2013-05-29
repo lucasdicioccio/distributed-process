@@ -133,6 +133,8 @@ import Control.Distributed.Process.Internal.Types
   , ProcessInfo(..)
   , ProcessInfoNone(..)
   , NodeStats(..)
+  , incrementNodeStats
+  , initNodeStats
   , SendPortId(..)
   , typedChannelWithId
   , RegisterReply(..)
@@ -353,7 +355,6 @@ handleIncomingMessages node = go initConnectionState
     go :: ConnectionState -> IO ()
     go !st = do
       event <- NT.receive endpoint
--- TODO LDC: log some statistics
       case event of
         NT.ConnectionOpened cid rel theirAddr ->
           if rel == NT.ReliableOrdered
@@ -497,8 +498,9 @@ initNCState = NCState { _links    = Map.empty
                       , _monitors = Map.empty
                       , _registeredHere = Map.empty
                       , _registeredOnNodes = Map.empty
-                      , _stats = NodeStats 0
+                      , _stats = initNodeStats counters
                       }
+                where counters = ["link", "monitor", "unlink", "unmonitor", "died", "spawn", "register", "where-is", "named-send", "kill", "exit", "get-info", "get-stats"]
 
 -- | Thrown in response to the user invoking 'kill' (see Primitives.hs). This
 -- type is deliberately not exported so it cannot be caught explicitly.
@@ -551,9 +553,6 @@ nodeController = do
   forever' $ do
     msg  <- liftIO $ readChan (localCtrlChan node)
 
-    -- Increment stats
-    modify' $ stats ^: incrementMessageCount
-
     -- [Unified: Table 7, rule nc_forward]
     case destNid (ctrlMsgSignal msg) of
       Just nid' | nid' /= localNodeId node ->
@@ -567,36 +566,36 @@ nodeController = do
 
     case msg of
       NCMsg (ProcessIdentifier from) (Link them) ->
-        ncEffectMonitor from them Nothing
+        incr "link" >> ncEffectMonitor from them Nothing
       NCMsg (ProcessIdentifier from) (Monitor ref) ->
-        ncEffectMonitor from (monitorRefIdent ref) (Just ref)
+        incr "monitor" >> ncEffectMonitor from (monitorRefIdent ref) (Just ref)
       NCMsg (ProcessIdentifier from) (Unlink them) ->
-        ncEffectUnlink from them
+        incr "unlink" >> ncEffectUnlink from them
       NCMsg (ProcessIdentifier from) (Unmonitor ref) ->
-        ncEffectUnmonitor from ref
+        incr "unmonitor" >> ncEffectUnmonitor from ref
       NCMsg _from (Died ident reason) ->
-        ncEffectDied ident reason
+        incr "died" >> ncEffectDied ident reason
       NCMsg (ProcessIdentifier from) (Spawn proc ref) ->
-        ncEffectSpawn from proc ref
+        incr "spawn" >> ncEffectSpawn from proc ref
       NCMsg (ProcessIdentifier from) (Register label atnode pid force) ->
-        ncEffectRegister from label atnode pid force
+        incr "register" >> ncEffectRegister from label atnode pid force
       NCMsg (ProcessIdentifier from) (WhereIs label) ->
-        ncEffectWhereIs from label
+        incr "where-is" >> ncEffectWhereIs from label
       NCMsg from (NamedSend label msg') ->
-        ncEffectNamedSend from label msg'
+        incr "named-send" >> ncEffectNamedSend from label msg'
       NCMsg (ProcessIdentifier from) (Kill to reason) ->
-        ncEffectKill from to reason
+        incr "kill" >> ncEffectKill from to reason
       NCMsg (ProcessIdentifier from) (Exit to reason) ->
-        ncEffectExit from to reason
+        incr "exit" >> ncEffectExit from to reason
       NCMsg (ProcessIdentifier from) (GetInfo pid) ->
-        ncEffectGetInfo from pid
+        incr "get-info" >> ncEffectGetInfo from pid
       NCMsg (ProcessIdentifier from) (GetStats) ->
-        ncEffectGetStats from
+        incr "get-stats" >> ncEffectGetStats from
       unexpected ->
         error $ "nodeController: unexpected message " ++ show unexpected
 
 
-    where incrementMessageCount (NodeStats x) = NodeStats (x + 1)
+    where   incr txt = modify' $ stats ^: incrementNodeStats txt
 
 -- [Unified: Table 10]
 ncEffectMonitor :: ProcessId        -- ^ Who's watching?

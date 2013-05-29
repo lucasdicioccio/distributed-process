@@ -54,6 +54,8 @@ module Control.Distributed.Process.Internal.Types
   , ProcessInfo(..)
   , ProcessInfoNone(..)
   , NodeStats(..)
+  , incrementNodeStats
+  , initNodeStats
     -- * Node controller internal data types
   , NCMsg(..)
   , ProcessSignal(..)
@@ -75,6 +77,7 @@ module Control.Distributed.Process.Internal.Types
 
 import System.Mem.Weak (Weak)
 import Data.Map (Map)
+import qualified Data.Map as Map (update, fromList)
 import Data.Int (Int32)
 import Data.Typeable (Typeable)
 import Data.Binary (Binary(put, get), putWord8, getWord8, encode)
@@ -487,10 +490,19 @@ data ProcessSignal =
   | GetStats
   deriving Show
 
+type NodeCounter = String
+
 -- | Provide statistics about the local node
 data NodeStats = NodeStats {
-    statsProcessedMessages  :: Int
+      statsTotalMessages      :: !Int
+    , statsMessageBreakdown   :: !(Map NodeCounter Int)
   } deriving (Show, Eq, Typeable)
+
+initNodeStats :: [NodeCounter] -> NodeStats
+initNodeStats xs = NodeStats 0 $ Map.fromList $ zip xs (repeat 0)
+
+incrementNodeStats :: NodeCounter -> NodeStats -> NodeStats
+incrementNodeStats k (NodeStats x m) = NodeStats (x + 1) $ (Map.update (Just . (+1)) k m)
 
 --------------------------------------------------------------------------------
 -- Binary instances                                                           --
@@ -613,8 +625,9 @@ instance Binary ProcessInfoNone where
   put (ProcessInfoNone r) = put r
 
 instance Binary NodeStats where
-    get = NodeStats <$> get
-    put = put . statsProcessedMessages
+    get = NodeStats <$> get <*> get
+    put pInfo = put (statsTotalMessages pInfo)
+        >> put (statsMessageBreakdown pInfo) 
 
 
 --------------------------------------------------------------------------------
