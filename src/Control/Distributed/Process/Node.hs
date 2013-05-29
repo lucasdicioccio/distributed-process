@@ -550,7 +550,9 @@ nodeController = do
   node <- ask
   forever' $ do
     msg  <- liftIO $ readChan (localCtrlChan node)
-    -- TODO LDC: record some stats
+
+    -- Increment stats
+    modify' $ stats ^: incrementMessageCount
 
     -- [Unified: Table 7, rule nc_forward]
     case destNid (ctrlMsgSignal msg) of
@@ -592,6 +594,9 @@ nodeController = do
         ncEffectGetStats from
       unexpected ->
         error $ "nodeController: unexpected message " ++ show unexpected
+
+
+    where incrementMessageCount (NodeStats x) = NodeStats (x + 1)
 
 -- [Unified: Table 10]
 ncEffectMonitor :: ProcessId        -- ^ Who's watching?
