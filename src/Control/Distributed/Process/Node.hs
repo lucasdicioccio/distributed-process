@@ -353,6 +353,7 @@ handleIncomingMessages node = go initConnectionState
     go :: ConnectionState -> IO ()
     go !st = do
       event <- NT.receive endpoint
+-- TODO LDC: log some statistics
       case event of
         NT.ConnectionOpened cid rel theirAddr ->
           if rel == NT.ReliableOrdered
@@ -549,6 +550,7 @@ nodeController = do
   node <- ask
   forever' $ do
     msg  <- liftIO $ readChan (localCtrlChan node)
+    -- TODO LDC: record some stats
 
     -- [Unified: Table 7, rule nc_forward]
     case destNid (ctrlMsgSignal msg) of
@@ -858,7 +860,7 @@ ncEffectGetInfo from pid =
 ncEffectGetStats :: ProcessId -> NC ()
 ncEffectGetStats from = do
   node <- ask
-  statsData <- gets (id . (^. stats))
+  statsData <- gets (^. stats)
   dispatch (isLocal node (ProcessIdentifier from)) from node statsData
   where dispatch :: (Serializable a, Show a)
                  => Bool
