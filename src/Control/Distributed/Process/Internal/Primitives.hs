@@ -503,7 +503,7 @@ getProcessInfo pid =
                            _    -> return $ Just them
 
 
--- | Get statistics of a given Node with a timeout
+-- | Get statistics of a given Node within a given timeout
 getNodeStats :: Int -> NodeId -> Process (Maybe NodeStats)
 getNodeStats n nid = do
   us <- getSelfNode
